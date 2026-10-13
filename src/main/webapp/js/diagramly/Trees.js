@@ -356,6 +356,11 @@
 				{
 					this.addMenuItems(menu, ['selectConnections'], null, evt);
 				}
+			menu.addSeparator();
+			menu.addItem('Markdownとして書き出し', null, function()
+			{
+				ui.showTextDialog('Marldown', 'テスト')	
+			});
 			}
 		};
 
