@@ -323,6 +323,20 @@
 		};
 		
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
+
+		function toMarkDown (cell, depth)
+        {
+        	console.log("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
+
+			var edges = graph.getOutgoingTreeEdges(cell);
+
+			for(var i = 0; i < edges.length; i++)
+			{
+				var child = graph.model.getTerminal(edges[i], false);
+				toMarkDown(child, depth + 1);
+			}
+        }
+		
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
@@ -360,7 +374,7 @@
 			menu.addSeparator();
 			menu.addItem('Markdown として書き出し', null, function()
 			{
-    			ui.showTextDialog('Markdown', 'テスト');
+				toMarkDown(graph.getSelectionCell(), 0);
 			});
 			
 			}
