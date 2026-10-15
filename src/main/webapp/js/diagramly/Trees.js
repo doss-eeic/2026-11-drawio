@@ -323,21 +323,20 @@
 		};
 		
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
-
 		function toMarkDown (cell, depth)
-        {
-        	var text = "  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n";
+        {
+        	//console.log(graph.convertValueToString(cell), depth);
+        	var md = ("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
 
 			var edges = graph.getOutgoingTreeEdges(cell);
 
 			for(var i = 0; i < edges.length; i++)
 			{
 				var child = graph.model.getTerminal(edges[i], false);
-				text += toMarkDown(child, depth + 1);
+				md += toMarkDown(child, depth + 1);
 			}
-            return text;
-        }
-		
+			return md;
+        }
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
@@ -373,9 +372,11 @@
 				}
 
 			menu.addSeparator();
+
 			menu.addItem('Markdownをクリップボードにコピー', null, function()
 			{
-				toMarkDown(graph.getSelectionCell(), 0);
+				var md = toMarkDown(graph.getSelectionCell(), 0);
+				navigator.clipboard.writeText(md);
 			});
 			menu.addItem('Markdownをファイルとして出力', null, function()
 			{
@@ -383,7 +384,6 @@
 				console.log(md); //動作確認用
 				ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
 			});
-			
 			}
 		};
 
