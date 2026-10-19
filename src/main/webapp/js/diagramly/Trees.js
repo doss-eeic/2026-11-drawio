@@ -325,7 +325,6 @@
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
 		function toMarkDown (cell, depth)
         {
-        	//console.log(graph.convertValueToString(cell), depth);
         	var md = ("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
 
 			var edges = graph.getOutgoingTreeEdges(cell);
@@ -337,6 +336,89 @@
 			}
 			return md;
         }
+
+		function parseMarkDown(text){
+			var items = [];
+			var lines = text.split('\n');
+
+			for (var i = 0; i < lines.length; i++){
+				var line = lines[i];
+				// TODO: 空行なら飛ばす
+				if (line.trim() === '') {
+					continue;
+				}
+				// TODO: 行頭のスペースの数を数えて depth を出す
+				var depth = 0;
+				while (line.charAt(depth) === ' ') {
+					depth++;
+				}
+				// TODO: 先頭のスペースと "- " を取り除いて文字を出す
+				line = line.substring(depth + 2).trim();
+				// TODO: items に {depth: ..., text: ...} を追加する
+				items.push({depth: Math.floor(depth / 2), text: line});
+			}
+			return items;
+		}
+
+		function buildMindmap(root, items){
+			if (!isTreeVertex(root))
+			{
+				mxUtils.alert('Mindmap の枠の中のノードを選んでから実行してください');
+				return;
+			}
+			graph.model.beginUpdate();
+			try
+			{
+				graph.labelChanged(root, items[0].text);
+
+				var parents = [root];
+
+				for (var i = 1; i < items.length; i++)
+				{
+					var item = items[i];
+					// TODO: 親 = parents[item.depth - 1]
+					var parent = parents[item.depth - 1];
+					// TODO: var added = addChild(親);   → added[1] が新しいノード
+					var added = addChild(parent);
+					// TODO: 新しいノードの文字を item.text にする
+					graph.labelChanged(added[1], item.text);
+					// TODO: parents[item.depth] = 新しいノード
+					parents[item.depth] = added[1];
+				}
+			}
+			finally
+			{
+				graph.model.endUpdate();
+			}
+		}
+
+		function fromMarkDown(root, text){
+			var items = parseMarkDown(text);
+
+			if (items.length > 0)
+			{
+				buildMindmap(root, items);
+			}
+		}
+
+		function pickMarkDownFile(callback){
+			var input = document.createElement('input');
+			input.setAttribute('type', 'file');
+			input.setAttribute('accept', '.md,.txt');
+
+			mxEvent.addListener(input, 'change', function(){
+				// TODO: input.files[0] を FileReader で readAsText する
+				var reader = new FileReader();
+				reader.onload = function(e) {
+					// TODO: onload の中で callback(読み込んだ文字列) を呼ぶ
+					callback(e.target.result);
+				};
+				reader.readAsText(input.files[0]);
+			});
+
+			input.click();
+		}
+
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
@@ -381,8 +463,19 @@
 			menu.addItem('Markdownをファイルとして出力', null, function()
 			{
 				var md = toMarkDown(graph.getSelectionCell(), 0);
-				console.log(md); //動作確認用
 				ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
+			});
+
+			menu.addSeparator();
+
+			menu.addItem('Markdownからマインドマップを作成', null, function()
+			{
+				var root = graph.getSelectionCell();
+
+				pickMarkDownFile(function(text)
+				{
+					fromMarkDown(root, text);
+				});
 			});
 			}
 		};
