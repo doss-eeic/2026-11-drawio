@@ -325,7 +325,6 @@
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
 		function toMarkDown (cell, depth)
         {
-        	//console.log(graph.convertValueToString(cell), depth);
         	var md = ("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
 
 			var edges = graph.getOutgoingTreeEdges(cell);
@@ -337,6 +336,25 @@
 			}
 			return md;
         }
+
+		var palette = ['#E53935', '#F4511E', '#FB8C00', '#FDD835',
+ '#C0CA33', '#7CB342', '#43A047', '#00897B',
+ '#00ACC1', '#039BE5', '#1E88E5', '#5C6BC0',
+ '#7E57C2', '#8E24AA', '#D81B60', '#8D6E63'] 
+
+		function colorEdges(cell, color)
+		{
+			var edges = graph.getOutgoingTreeEdges(cell);
+
+			for(var i = 0; i < edges.length; i++)
+			{
+				var child = graph.model.getTerminal(edges[i],false);
+				var selectcolor = color || palette[(i*5) % palette.length];
+				graph.setCellStyles('strokeColor', selectcolor, [edges[i]]);
+				graph.setCellStyles('strokeColor', selectcolor, [child]);
+				colorEdges(child, selectcolor);
+			}
+		}
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
@@ -381,10 +399,13 @@
 			menu.addItem('Markdownをファイルとして出力', null, function()
 			{
 				var md = toMarkDown(graph.getSelectionCell(), 0);
-				console.log(md); //動作確認用
 				ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
 			});
 			}
+			menu.addItem('エッジに色を付ける', null, function()
+			{
+				colorEdges(graph.getSelectionCell())
+			});
 		};
 
 		// Adds actions
