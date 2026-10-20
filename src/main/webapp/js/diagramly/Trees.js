@@ -323,6 +323,7 @@
 		};
 		
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
+
 		function toMarkDown (cell, depth)
         {
         	var md = ("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
@@ -478,6 +479,43 @@
 				graph.setCellStyles('strokeColor', selectcolor, [child]);
 				colorEdges(child, selectcolor);
 			}
+		}
+
+		var aiSuggestEnabled = true;
+		var suggestionCache = {};
+
+		var uiGetCellsForShapePicker = ui.getCellsForShapePicker;
+
+		ui.getCellsForShapePicker = function(cell, hovering, showEdges)
+		{
+			var cells = uiGetCellsForShapePicker.apply(this, arguments);   // いつもの候補
+			var texts = (cell != null) ? suggestionCache[cell.id] : null;
+
+			if (aiSuggestEnabled && isTreeVertex(cell) && Array.isArray(texts))
+			{
+				var aiCells = [];
+
+				for (var i = 0; i < texts.length; i++)
+				{
+					// graph.cloneCell(cell) で元ノードをコピー
+					var copy = graph.cloneCell(cell);
+					// コピーの value を texts[i] に、geometry の x, y を 0 にする
+					copy.value = texts[i];
+					if (copy.geometry != null)
+					{
+						copy.geometry.x = 0;
+						copy.geometry.y = 0;
+					}
+					// style に dashed=1 を足す（mxUtils.setStyle(スタイル, 'dashed', '1')）
+					copy.style = mxUtils.setStyle(copy.style, 'dashed', '1');
+					// aiCells.push(コピー)
+					aiCells.push(copy);
+				}
+
+				return aiCells.concat(cells);   // AI の提案を先頭に、そのあといつもの図形
+			}
+
+			return cells;
 		}
 
 		ui.menus.createPopupMenu = function(menu, cell, evt)
