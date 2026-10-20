@@ -481,7 +481,44 @@
 			}
 		}
 
-		var aiSuggestEnabled = true;
+		function requestAiMock(prompt, callback)
+		{
+			setTimeout(function()
+			{
+				callback('- 案A\n- 案B\n- 案C');
+			}, 2000);
+		}
+
+		graph.getSelectionModel().addListener(mxEvent.CHANGE, function()
+		{
+			var cell = graph.getSelectionCell();
+
+			if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
+				isTreeVertex(cell) && suggestionCache[cell.id] == null)
+			{
+				suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印（二重に聞かないため）
+
+				var prompt = graph.convertValueToString(cell);   // 仮。本番は班員の buildPrompt(cell)
+
+				requestAiMock(prompt, function(markdown)
+				{
+					var items = parseMarkDown(markdown);
+					var texts = [];
+
+					for (var i = 0; i < items.length; i++)
+					{
+						if (items[i].depth == 0)
+						{
+							texts.push(items[i].text);
+						}
+					}
+
+					suggestionCache[cell.id] = texts;
+				});
+			}
+		});
+
+		var aiSuggestEnabled = false;
 		var suggestionCache = {};
 
 		var uiGetCellsForShapePicker = ui.getCellsForShapePicker;
@@ -508,6 +545,7 @@
 					}
 					// style に dashed=1 を足す（mxUtils.setStyle(スタイル, 'dashed', '1')）
 					copy.style = mxUtils.setStyle(copy.style, 'dashed', '1');
+					copy.style = mxUtils.setStyle(copy.style, 'aiSuggestion', '1'); 
 					// aiCells.push(コピー)
 					aiCells.push(copy);
 				}
@@ -517,6 +555,28 @@
 
 			return cells;
 		}
+
+		graph.addListener(mxEvent.CELLS_ADDED, function(sender, evt)
+		{
+			var cells = evt.getProperty('cells');
+			var targets = [];
+
+			for (var i = 0; i < cells.length; i++)
+			{
+				var style = cells[i].style;
+
+				if (style != null && style.indexOf('aiSuggestion=1') >= 0)
+				{
+					targets.push(cells[i]);
+				}
+			}
+
+			if (targets.length > 0)
+			{
+				graph.setCellStyles('dashed', null, targets);
+				graph.setCellStyles('aiSuggestion', null, targets);
+			}
+		});
 
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
@@ -597,6 +657,12 @@
 						var items = parseMarkDown(text);
 						createMindmap(items);
 					});
+				});
+
+				menu.addSeparator();
+				menu.addItem(aiSuggestEnabled ? 'AIサジェストを無効にする' : 'AIサジェストを有効にする', null, function()
+				{
+					aiSuggestEnabled = !aiSuggestEnabled;
 				});
 			}
 		};
