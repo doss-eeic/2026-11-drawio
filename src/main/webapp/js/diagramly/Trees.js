@@ -347,14 +347,14 @@
 				if (line.trim() === '') {
 					continue;
 				}
-				// TODO: 行頭のスペースの数を数えて depth を出す
+				// 行頭のスペースの数を数えて depth を出す
 				var depth = 0;
 				while (line.charAt(depth) === ' ') {
 					depth++;
 				}
-				// TODO: 先頭のスペースと "- " を取り除いて文字を出す
+				// 先頭のスペースと "- " を取り除いて文字を出す
 				line = line.substring(depth + 2).trim();
-				// TODO: items に {depth: ..., text: ...} を追加する
+				// items に {depth: ..., text: ...} を追加する
 				items.push({depth: Math.floor(depth / 2), text: line});
 			}
 			return items;
@@ -376,13 +376,13 @@
 				for (var i = 1; i < items.length; i++)
 				{
 					var item = items[i];
-					// TODO: 親 = parents[item.depth - 1]
+					// 親 = parents[item.depth - 1]
 					var parent = parents[item.depth - 1];
-					// TODO: var added = addChild(親);   → added[1] が新しいノード
+					// var added = addChild(親);   → added[1] が新しいノード
 					var added = addChild(parent);
-					// TODO: 新しいノードの文字を item.text にする
+					// 新しいノードの文字を item.text にする
 					graph.labelChanged(added[1], item.text);
-					// TODO: parents[item.depth] = 新しいノード
+					// parents[item.depth] = 新しいノード
 					parents[item.depth] = added[1];
 				}
 			}
@@ -407,16 +407,58 @@
 			input.setAttribute('accept', '.md,.txt');
 
 			mxEvent.addListener(input, 'change', function(){
-				// TODO: input.files[0] を FileReader で readAsText する
+				// input.files[0] を FileReader で readAsText する
 				var reader = new FileReader();
 				reader.onload = function(e) {
-					// TODO: onload の中で callback(読み込んだ文字列) を呼ぶ
+					// onload の中で callback(読み込んだ文字列) を呼ぶ
 					callback(e.target.result);
 				};
 				reader.readAsText(input.files[0]);
 			});
 
 			input.click();
+		}
+
+		function createMindmap(items)
+		{
+			var pt = graph.getFreeInsertPoint();   // 空いている場所
+
+			// 自動レイアウト付きの入れ物
+			var container = new mxCell('', new mxGeometry(0, 0, 0, 0),
+				Menus.layoutContainers.horizontalTree.style);
+			container.vertex = true;
+
+			var parents = [];
+
+			for (var i = 0; i < items.length; i++)
+			{
+				// ノードを作る（new mxCell(文字, new mxGeometry(pt.x, pt.y, 幅, 高さ), スタイル)、vertex = true）
+				var node = new mxCell(items[i].text, new mxGeometry(pt.x, pt.y, 100, 30), 'whiteSpace=wrap;html=1;treeFolding=1;treeMoving=1;');
+				node.vertex = true;
+				// container.insert(ノード)
+				container.insert(node);				
+				// 深さが1以上なら、parents[深さ - 1] からこのノードへのエッジを作って container.insert(エッジ)
+				if (items[i].depth > 0) {
+					var e = new mxCell('', new mxGeometry(0, 0, 0, 0), 'endArrow=none;html=1;');
+					e.geometry.relative = true;
+					e.edge = true;
+					parents[items[i].depth - 1].insertEdge(e, true);
+					node.insertEdge(e, false);
+					container.insert(e);
+				}
+				// parents[深さ] = ノード
+				parents[items[i].depth] = node;
+			}
+
+			graph.model.beginUpdate();
+			try
+			{
+				graph.setSelectionCell(graph.addCell(container));
+			}
+			finally
+			{
+				graph.model.endUpdate();
+			}
 		}
 
 		var palette = ['#E53935', '#F4511E', '#FB8C00', '#FDD835',
@@ -472,35 +514,53 @@
 					this.addMenuItems(menu, ['selectConnections'], null, evt);
 				}
 
-			menu.addSeparator();
+				menu.addSeparator();
 
-			menu.addItem('Markdownをクリップボードにコピー', null, function()
-			{
-				var md = toMarkDown(graph.getSelectionCell(), 0);
-				navigator.clipboard.writeText(md);
-			});
-			menu.addItem('Markdownをファイルとして出力', null, function()
-			{
-				var md = toMarkDown(graph.getSelectionCell(), 0);
-				ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
-			});
-
-			menu.addSeparator();
-
-			menu.addItem('Markdownからマインドマップを作成', null, function()
-			{
-				var root = graph.getSelectionCell();
-
-				pickMarkDownFile(function(text)
+				menu.addItem('Markdownをクリップボードにコピー', null, function()
 				{
-					fromMarkDown(root, text);
+					var md = toMarkDown(graph.getSelectionCell(), 0);
+					navigator.clipboard.writeText(md);
 				});
-			});
+				menu.addItem('Markdownをファイルとして出力', null, function()
+				{
+					var md = toMarkDown(graph.getSelectionCell(), 0);
+					ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
+				});
+
+				menu.addSeparator();
+
+				menu.addItem('Markdownからマインドマップを作成', null, function()
+				{
+					var root = graph.getSelectionCell();
+
+					pickMarkDownFile(function(text)
+					{
+						fromMarkDown(root, text);
+					});
+				});
+
+				menu.addSeparator();
+
+				menu.addItem('エッジに色を付ける', null, function()
+				{
+					colorEdges(graph.getSelectionCell())
+				});
+
 			}
-			menu.addItem('エッジに色を付ける', null, function()
+
+			if (graph.getSelectionCount() == 0)
 			{
-				colorEdges(graph.getSelectionCell())
-			});
+				menu.addSeparator();
+				menu.addItem('Markdownからマインドマップを作成', null, function()
+				{
+					// pickMarkDownFile → parseMarkDown → createMindmap
+					pickMarkDownFile(function(text)
+					{
+						var items = parseMarkDown(text);
+						createMindmap(items);
+					});
+				});
+			}
 		};
 
 		// Adds actions
