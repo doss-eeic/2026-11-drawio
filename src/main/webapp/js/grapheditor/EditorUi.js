@@ -2545,6 +2545,10 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 		
 		var addCell = mxUtils.bind(this, function(cell)
 		{
+			var isAi = cell.style != null && cell.style.indexOf('aiSuggestion=1') >= 0;   // ← 追加
+			var thumbW = isAi ? 120 : 25;                                                 // ← 追加
+			var thumbH = isAi ? 36 : 25;
+
 			// Wrapper needed to catch events
 			var node = document.createElement('a');
 			div.appendChild(node);
@@ -2650,10 +2654,17 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 
 						mxEvent.consume(evt);
 					}
-				}), 25, 25, null, null, source, connectEdge);
+				}), thumbW, thumbH, null, null, source, connectEdge);
 				temp.style.display = 'flex';
 				temp.style.alignItems = 'center';
 				temp.style.justifyContent = 'center';
+
+				if(isAi){
+					node.style.display = 'block';
+					node.style.width = (thumbW + 6) + 'px';
+					node.style.height = (thumbH + 6) + 'px';
+					node.style.margin = '2px auto';
+				}
 				node.appendChild(temp);
 			}
 		});
