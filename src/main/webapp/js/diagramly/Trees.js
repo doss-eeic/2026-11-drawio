@@ -525,7 +525,7 @@
   				headers: 
 				{
     				'Content-Type': 'application/json',
-    				'Authorization': 'Bearer sk-L9VOJpFY4xa4Epa6ED8z2A'
+    				'Authorization': 'Bearer ' + window.aiKey
   				},
   				body: JSON.stringify({
     			model: 'gpt-oss-20b-mdx-maas',
