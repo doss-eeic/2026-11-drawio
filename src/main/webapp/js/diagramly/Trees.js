@@ -323,6 +323,7 @@
 		};
 		
 		var uiCreatePopupMenu = ui.menus.createPopupMenu;
+
 		function toMarkDown (cell, depth)
         {
         	var md = ("  ".repeat(depth) + "- " + graph.convertValueToString(cell) + "\n")
@@ -336,6 +337,130 @@
 			}
 			return md;
         }
+
+		function parseMarkDown(text){
+			var items = [];
+			var lines = text.split('\n');
+
+			for (var i = 0; i < lines.length; i++){
+				var line = lines[i];
+				// TODO: 空行なら飛ばす
+				if (line.trim() === '') {
+					continue;
+				}
+				// 行頭のスペースの数を数えて depth を出す
+				var depth = 0;
+				while (line.charAt(depth) === ' ') {
+					depth++;
+				}
+				// 先頭のスペースと "- " を取り除いて文字を出す
+				line = line.substring(depth + 2).trim();
+				// items に {depth: ..., text: ...} を追加する
+				items.push({depth: Math.floor(depth / 2), text: line});
+			}
+			return items;
+		}
+
+		function buildMindmap(root, items){
+			if (!isTreeVertex(root))
+			{
+				mxUtils.alert('Mindmap の枠の中のノードを選んでから実行してください');
+				return;
+			}
+			graph.model.beginUpdate();
+			try
+			{
+				graph.labelChanged(root, items[0].text);
+
+				var parents = [root];
+
+				for (var i = 1; i < items.length; i++)
+				{
+					var item = items[i];
+					// 親 = parents[item.depth - 1]
+					var parent = parents[item.depth - 1];
+					// var added = addChild(親);   → added[1] が新しいノード
+					var added = addChild(parent);
+					// 新しいノードの文字を item.text にする
+					graph.labelChanged(added[1], item.text);
+					// parents[item.depth] = 新しいノード
+					parents[item.depth] = added[1];
+				}
+			}
+			finally
+			{
+				graph.model.endUpdate();
+			}
+		}
+
+		function fromMarkDown(root, text){
+			var items = parseMarkDown(text);
+
+			if (items.length > 0)
+			{
+				buildMindmap(root, items);
+			}
+		}
+
+		function pickMarkDownFile(callback){
+			var input = document.createElement('input');
+			input.setAttribute('type', 'file');
+			input.setAttribute('accept', '.md,.txt');
+
+			mxEvent.addListener(input, 'change', function(){
+				// input.files[0] を FileReader で readAsText する
+				var reader = new FileReader();
+				reader.onload = function(e) {
+					// onload の中で callback(読み込んだ文字列) を呼ぶ
+					callback(e.target.result);
+				};
+				reader.readAsText(input.files[0]);
+			});
+
+			input.click();
+		}
+
+		function createMindmap(items)
+		{
+			var pt = graph.getFreeInsertPoint();   // 空いている場所
+
+			// 自動レイアウト付きの入れ物
+			var container = new mxCell('', new mxGeometry(0, 0, 0, 0),
+				Menus.layoutContainers.horizontalTree.style);
+			container.vertex = true;
+
+			var parents = [];
+
+			for (var i = 0; i < items.length; i++)
+			{
+				// ノードを作る（new mxCell(文字, new mxGeometry(pt.x, pt.y, 幅, 高さ), スタイル)、vertex = true）
+				var node = new mxCell(items[i].text, new mxGeometry(pt.x, pt.y, 100, 30), 'whiteSpace=wrap;html=1;treeFolding=1;treeMoving=1;');
+				node.vertex = true;
+				// container.insert(ノード)
+				container.insert(node);				
+				// 深さが1以上なら、parents[深さ - 1] からこのノードへのエッジを作って container.insert(エッジ)
+				if (items[i].depth > 0) {
+					var e = new mxCell('', new mxGeometry(0, 0, 0, 0), 'endArrow=none;html=1;');
+					e.geometry.relative = true;
+					e.edge = true;
+					parents[items[i].depth - 1].insertEdge(e, true);
+					node.insertEdge(e, false);
+					container.insert(e);
+				}
+				// parents[深さ] = ノード
+				parents[items[i].depth] = node;
+			}
+
+			graph.model.beginUpdate();
+			try
+			{
+				graph.setSelectionCell(graph.addCell(container));
+			}
+			finally
+			{
+				graph.model.endUpdate();
+			}
+		}
 
 		var palette = ['#E53935', '#F4511E', '#FB8C00', '#FDD835',
  '#C0CA33', '#7CB342', '#43A047', '#00897B',
@@ -409,6 +534,103 @@
 			}).then(r => r.json()).then(d => d.choices[0].message.content)
 		}
 
+		function requestAiMock(prompt, callback)
+		{
+			setTimeout(function()
+			{
+				callback('- 案A\n- 案B\n- 案C');
+			}, 2000);
+		}
+
+		graph.getSelectionModel().addListener(mxEvent.CHANGE, function()
+		{
+			var cell = graph.getSelectionCell();
+
+			if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
+				isTreeVertex(cell) && suggestionCache[cell.id] == null)
+			{
+				suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印（二重に聞かないため）
+
+				var prompt = graph.convertValueToString(cell);   // 仮。本番は班員の buildPrompt(cell)
+
+				requestAiMock(prompt, function(markdown)
+				{
+					var items = parseMarkDown(markdown);
+					var texts = [];
+
+					for (var i = 0; i < items.length; i++)
+					{
+						if (items[i].depth == 0)
+						{
+							texts.push(items[i].text);
+						}
+					}
+
+					suggestionCache[cell.id] = texts;
+				});
+			}
+		});
+
+		var aiSuggestEnabled = false;
+		var suggestionCache = {};
+
+		var uiGetCellsForShapePicker = ui.getCellsForShapePicker;
+
+		ui.getCellsForShapePicker = function(cell, hovering, showEdges)
+		{
+			var cells = uiGetCellsForShapePicker.apply(this, arguments);   // いつもの候補
+			var texts = (cell != null) ? suggestionCache[cell.id] : null;
+
+			if (aiSuggestEnabled && isTreeVertex(cell) && Array.isArray(texts))
+			{
+				var aiCells = [];
+
+				for (var i = 0; i < texts.length; i++)
+				{
+					// graph.cloneCell(cell) で元ノードをコピー
+					var copy = graph.cloneCell(cell);
+					// コピーの value を texts[i] に、geometry の x, y を 0 にする
+					copy.value = texts[i];
+					if (copy.geometry != null)
+					{
+						copy.geometry.x = 0;
+						copy.geometry.y = 0;
+					}
+					// style に dashed=1 を足す（mxUtils.setStyle(スタイル, 'dashed', '1')）
+					copy.style = mxUtils.setStyle(copy.style, 'dashed', '1');
+					copy.style = mxUtils.setStyle(copy.style, 'aiSuggestion', '1'); 
+					// aiCells.push(コピー)
+					aiCells.push(copy);
+				}
+
+				return aiCells.concat(cells);   // AI の提案を先頭に、そのあといつもの図形
+			}
+
+			return cells;
+		}
+
+		graph.addListener(mxEvent.CELLS_ADDED, function(sender, evt)
+		{
+			var cells = evt.getProperty('cells');
+			var targets = [];
+
+			for (var i = 0; i < cells.length; i++)
+			{
+				var style = cells[i].style;
+
+				if (style != null && style.indexOf('aiSuggestion=1') >= 0)
+				{
+					targets.push(cells[i]);
+				}
+			}
+
+			if (targets.length > 0)
+			{
+				graph.setCellStyles('dashed', null, targets);
+				graph.setCellStyles('aiSuggestion', null, targets);
+			}
+		});
+
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
@@ -443,23 +665,59 @@
 					this.addMenuItems(menu, ['selectConnections'], null, evt);
 				}
 
-			menu.addSeparator();
+				menu.addSeparator();
 
-			menu.addItem('Markdownをクリップボードにコピー', null, function()
-			{
-				var md = toMarkDown(graph.getSelectionCell(), 0);
-				navigator.clipboard.writeText(md);
-			});
-			menu.addItem('Markdownをファイルとして出力', null, function()
-			{
-				var md = toMarkDown(graph.getSelectionCell(), 0);
-				ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
-			});
+				menu.addItem('Markdownをクリップボードにコピー', null, function()
+				{
+					var md = toMarkDown(graph.getSelectionCell(), 0);
+					navigator.clipboard.writeText(md);
+				});
+				menu.addItem('Markdownをファイルとして出力', null, function()
+				{
+					var md = toMarkDown(graph.getSelectionCell(), 0);
+					ui.doSaveLocalFile(md, 'markdown.md', 'text/markdown');
+				});
+
+				menu.addSeparator();
+
+				menu.addItem('Markdownからマインドマップを作成', null, function()
+				{
+					var root = graph.getSelectionCell();
+
+					pickMarkDownFile(function(text)
+					{
+						fromMarkDown(root, text);
+					});
+				});
+
+				menu.addSeparator();
+
+				menu.addItem('エッジに色を付ける', null, function()
+				{
+					colorEdges(graph.getSelectionCell())
+				});
+
 			}
-			menu.addItem('エッジに色を付ける', null, function()
+
+			if (graph.getSelectionCount() == 0)
 			{
-				colorEdges(graph.getSelectionCell())
-			});
+				menu.addSeparator();
+				menu.addItem('Markdownからマインドマップを作成', null, function()
+				{
+					// pickMarkDownFile → parseMarkDown → createMindmap
+					pickMarkDownFile(function(text)
+					{
+						var items = parseMarkDown(text);
+						createMindmap(items);
+					});
+				});
+
+				menu.addSeparator();
+				menu.addItem(aiSuggestEnabled ? 'AIサジェストを無効にする' : 'AIサジェストを有効にする', null, function()
+				{
+					aiSuggestEnabled = !aiSuggestEnabled;
+				});
+			}
 		};
 
 		// Adds actions
