@@ -355,6 +355,60 @@
 				colorEdges(child, selectcolor);
 			}
 		}
+
+		function makingRoute(cell)
+		{
+			var route = [graph.convertValueToString(cell)]
+
+			while(true)
+			{
+				var incomingEdge =  graph.getIncomingTreeEdges(cell)
+				if(incomingEdge.length == 0)
+					break;
+				var parentCell = graph.model.getTerminal(incomingEdge[0],true)
+				route.unshift(graph.convertValueToString(parentCell))
+				var cell = parentCell
+			}
+
+			return route;
+		}
+
+		function getChildLabels(cell)
+		{
+			var edges = graph.getOutgoingTreeEdges(cell);
+			var labels = [];
+
+			for(var i = 0; i < edges.length; i++)
+			{
+				var child = graph.model.getTerminal(edges[i], false);
+				labels.push(graph.convertValueToString(child))
+			}
+			return labels;
+		}
+
+		function buildUserPrompt(cell)
+		{
+			var userPrompt = {"route":makingRoute(cell), "children":getChildLabels(cell)}
+			return JSON.stringify(userPrompt);
+		}
+
+		function returnSuggest(cell)
+		{
+			var systemPrompt = "ルートから選んだノードまでの経路とすでにある子の一覧をuserとして与えるので、経路の最後のノードの、下位の項目(子ノード)として適切な単語を以下の形式に従って出力してください　userの読み取り方：userは、JSONで与えられること。routeはルートから対象までのノードのラベルの配列で最後の要素が子を提案する対象であること、children は対象にすでにある子のラベルの配列で、空の配列のとき、子は1つもないこと　返答の形式：ハイフンと半角スペースで始まる箇条書きだけを返す、1行に1案　個数：ちょうど5個　言語：日本語　1案の長さ: 短い語句で　注意事項：前置き、説明、番号、見出し、コードブロックを書かない、すでにある子やそれと意味が近いものは出さない"
+			return fetch('https://taulec.zapto.org/litellm/v1/chat/completions', {
+  				method: 'POST',
+  				headers: 
+				{
+    				'Content-Type': 'application/json',
+    				'Authorization': 'Bearer sk-L9VOJpFY4xa4Epa6ED8z2A'
+  				},
+  				body: JSON.stringify({
+    			model: 'gpt-oss-20b-mdx-maas',
+    			messages: [ {role:'system', content:systemPrompt}, {role:'user', content:buildUserPrompt(cell)}]
+  				})
+			}).then(r => r.json()).then(d => d.choices[0].message.content)
+		}
+
 		ui.menus.createPopupMenu = function(menu, cell, evt)
 		{
 			uiCreatePopupMenu.apply(this, arguments);
