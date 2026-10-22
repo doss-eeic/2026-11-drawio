@@ -549,11 +549,11 @@
 			if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
 				isTreeVertex(cell) && suggestionCache[cell.id] == null)
 			{
-				suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印（二重に聞かないため）
+				suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印
 
-				var prompt = graph.convertValueToString(cell);   // 仮。本番は班員の buildPrompt(cell)
+				var prompt = graph.convertValueToString(cell);   // 仮
 
-				requestAiMock(prompt, function(markdown)
+				returnSuggest(cell).then(function(markdown)
 				{
 					var items = parseMarkDown(markdown);
 					var texts = [];
@@ -567,6 +567,10 @@
 					}
 
 					suggestionCache[cell.id] = texts;
+				}).catch(function(e)
+				{
+					delete suggestionCache[cell.id];
+					console.error('AI提案に失敗', e);
 				});
 			}
 		});
