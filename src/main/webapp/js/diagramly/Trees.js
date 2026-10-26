@@ -511,27 +511,92 @@
 			return labels;
 		}
 
+		function getSiblingInfo(cell)
+		{
+			var siblings = [];
+			if(graph.getIncomingTreeEdges(cell).length == 0)
+			{
+				return siblings;
+			}
+			var incomingEdge =  graph.getIncomingTreeEdges(cell)
+			var parentCell = graph.model.getTerminal(incomingEdge[0],true)
+			var outcomingEdge = graph.getOutgoingTreeEdges(parentCell)
+			for (var i = 0; i < outcomingEdge.length; i++)
+			{
+				var parentChildrenCell = graph.model.getTerminal(outcomingEdge[i],false) 
+				if(parentChildrenCell.id == cell.id)
+				{
+					continue
+				}				
+				siblings.push({label: graph.convertValueToString(parentChildrenCell), children: getChildLabels(parentChildrenCell)})
+			}
+			return siblings;
+		}
+
 		function buildUserPrompt(cell)
 		{
-			var userPrompt = {"route":makingRoute(cell), "children":getChildLabels(cell)}
+			var userPrompt = {"route":makingRoute(cell), "children":getChildLabels(cell), "siblings":getSiblingInfo(cell)}
 			return JSON.stringify(userPrompt);
 		}
 
 		function returnSuggest(cell)
 		{
-			var systemPrompt = "ルートから選んだノードまでの経路とすでにある子の一覧をuserとして与えるので、経路の最後のノードの、下位の項目(子ノード)として適切な単語を以下の形式に従って出力してください　userの読み取り方：userは、JSONで与えられること。routeはルートから対象までのノードのラベルの配列で最後の要素が子を提案する対象であること、children は対象にすでにある子のラベルの配列で、空の配列のとき、子は1つもないこと　返答の形式：ハイフンと半角スペースで始まる箇条書きだけを返す、1行に1案　個数：ちょうど5個　言語：日本語　1案の長さ: 短い語句で　注意事項：前置き、説明、番号、見出し、コードブロックを書かない、すでにある子やそれと意味が近いものは出さない"
-			return fetch('https://taulec.zapto.org/litellm/v1/chat/completions', {
-  				method: 'POST',
-  				headers: 
+			var systemPrompt = "ルートから選んだノードまでの経路とすでにある子の一覧をuserとして与えるので、経路の最後のノードの、下位の項目(子ノード)として適切な単語を、注意事項を最優先事項として扱い、以下の形式に従って出力してください　userの読み取り方：userは、JSONで与えられること。routeはルートから対象までのノードのラベルの配列で最後の要素が子を提案する対象であること、children は対象にすでにある子のラベルの配列で、空の配列のとき、子は1つもないこと。siblingsは対象と同じ親を持つ、ほかのノードと、その子の一覧で、空の配列のとき、兄弟は1つもないこと。　返答の形式：ハイフンと半角スペースで始まる箇条書きだけを返す、1行に1案　個数：ちょうど5個　言語：日本語　1案の長さ: 兄弟の子を参考に　（注意事項：前置き、説明、番号、見出し、コードブロックを書かない、すでにある子やそれと意味が近いものは出さない、兄弟の子を見て、「特徴・性質を述べている」のか「関連する語を並べている」のかを判断し、同じ種類で案を出す、兄弟の子と、同じ種類の関係で、対象の子としてふさわしい語を出す、例えば「兄弟の子が『〜に役立つ』のような特徴なら、『〜に使われる』のような特徴を出す」といったものにする）"
+			var key = getAiKey()
+			if(key)
+			{
+				return fetch('https://taulec.zapto.org/litellm/v1/chat/completions', {
+  					method: 'POST',
+  					headers: 
+					{
+    					'Content-Type': 'application/json',
+    					'Authorization': 'Bearer ' + key
+  					},
+  					body: JSON.stringify({
+    				model: 'gpt-oss-20b-mdx-maas',
+    				messages: [ {role:'system', content:systemPrompt}, {role:'user', content:buildUserPrompt(cell)}]
+  					})
+				}).then(r => r.json()).then(d => d.choices[0].message.content)
+			}
+			return Promise.reject(new Error('APIキーがありません'))
+		}
+
+		function getAiKey()
+		{
+			console.log('getAiKey called')
+			var aiSuggestKey = 'aiSuggestKey'
+			if(window.aiKey)
+			{
+				return window.aiKey;
+			}
+			var saved = null;
+				try
 				{
-    				'Content-Type': 'application/json',
-    				'Authorization': 'Bearer ' + window.aiKey
-  				},
-  				body: JSON.stringify({
-    			model: 'gpt-oss-20b-mdx-maas',
-    			messages: [ {role:'system', content:systemPrompt}, {role:'user', content:buildUserPrompt(cell)}]
-  				})
-			}).then(r => r.json()).then(d => d.choices[0].message.content)
+    				saved = sessionStorage.getItem(aiSuggestKey);
+				}
+				catch (e) {}
+			if(saved)
+			{
+				window.aiKey = saved;
+				return saved;
+			}
+			var inputKey = mxUtils.prompt("API鍵を入力してください", '')
+			if(inputKey == null)
+			{
+				return null;
+			}
+			inputKey = inputKey.trim()
+			if(inputKey == '')
+			{
+				return null;
+			}
+			window.aiKey = inputKey
+			try
+				{
+    				sessionStorage.setItem(aiSuggestKey, inputKey)
+				}
+			catch (e) {}
+				return inputKey;
 		}
 
 		function requestAiMock(prompt, callback)
@@ -815,7 +880,6 @@
 				{
 					colorEdges(graph.getSelectionCell())
 				});
-
 			}
 
 			if (graph.getSelectionCount() == 0)
