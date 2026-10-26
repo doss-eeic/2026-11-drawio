@@ -542,42 +542,6 @@
 			}, 2000);
 		}
 
-		// graph.getSelectionModel().addListener(mxEvent.CHANGE, function()
-		// {
-		// 	var cell = graph.getSelectionCell();
-
-		// 	if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
-		// 		isTreeVertex(cell) && suggestionCache[cell.id] == null)
-		// 	{
-		// 		suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印
-
-		// 		var prompt = graph.convertValueToString(cell);   // 仮
-
-		// 		returnSuggest(cell).then(function(markdown)
-		// 		{
-		// 			var items = parseMarkDown(markdown);
-		// 			var texts = [];
-
-		// 			for (var i = 0; i < items.length; i++)
-		// 			{
-		// 				if (items[i].depth == 0)
-		// 				{
-		// 					texts.push(items[i].text);
-		// 				}
-		// 			}
-
-		// 			suggestionCache[cell.id] = texts;
-		// 		}).catch(function(e)
-		// 		{
-		// 			delete suggestionCache[cell.id];
-		// 			console.error('AI提案に失敗', e);
-		// 		});
-		// 	}
-		// });
-
-		// var aiSuggestEnabled = false;
-		// var suggestionCache = {};
-
 		var aiSuggestEnabled = false;
 
 		// suggestionCache[cell.id] の中身
@@ -686,7 +650,7 @@
 				}
 			}
 		});	
-		
+
 		var uiGetCellsForShapePicker = ui.getCellsForShapePicker;
 
 		ui.getCellsForShapePicker = function(cell, hovering, showEdges)
@@ -721,6 +685,27 @@
 
 			return cells;
 		}
+
+		ui.getAiSuggestionStatus = function(cell)
+		{
+			if (!aiSuggestEnabled || !isTreeVertex(cell))
+			{
+				return null;
+			}
+
+			var state = suggestionCache[cell.id];
+
+			if (state != null && state.loading)
+			{
+				return '考え中…';
+			}
+			else if (state != null && state.error != null)
+			{
+				return '提案を取得できませんでした';
+			}
+
+			return null;   // 提案が届いている、またはまだ聞いていない
+		};
 
 		graph.addListener(mxEvent.CELLS_ADDED, function(sender, evt)
 		{
