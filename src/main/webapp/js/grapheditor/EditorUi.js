@@ -2669,11 +2669,6 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 			}
 		});
 		
-		// for (var i = 0; i < (hovering ? Math.min(cells.length, 4) : cells.length); i++)
-		// {
-		// 	addCell(cells[i]);
-		// }
-
 		// 候補を AI の案と、元からの図形に振り分ける
 
 		var aiCells = [];
@@ -2691,6 +2686,26 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 			{
 				normallCells.push(cells[i]);
 			}
+		}
+
+		var aiStatus = (this.getAiSuggestionStatus != null && source != null) ?
+		this.getAiSuggestionStatus(source) : null;
+
+		if (aiCells.length == 0 && aiStatus != null)
+		{
+			var statusDiv = document.createElement('div');
+			statusDiv.className = 'geShapePicker';
+			statusDiv.style.left = '100%';
+			statusDiv.style.top = '-1px';
+			statusDiv.style.width = '150px';
+			statusDiv.style.height = 'auto';
+			statusDiv.style.display = 'block';
+			statusDiv.style.padding = '10px 0';
+			statusDiv.style.textAlign = 'center';
+			statusDiv.style.fontSize = '12px';
+			statusDiv.style.color = 'gray';
+			mxUtils.write(statusDiv, aiStatus);
+			div.appendChild(statusDiv);
 		}
 
 		var max = hovering ? 3 : cells.length;

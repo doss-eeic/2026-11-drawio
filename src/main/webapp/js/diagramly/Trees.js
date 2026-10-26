@@ -607,41 +607,116 @@
 			}, 2000);
 		}
 
+		var aiSuggestEnabled = false;
+
+		// suggestionCache[cell.id] の中身
+		//   undefined          … まだ聞いていない
+		//   {loading: true}    … 問い合わせ中
+		//   ['案A', '案B', …]  … 届いた提案
+		//   {error: '理由'}    … 失敗した
+		var suggestionCache = {};
+
+		function requestSuggestions(cell)
+		{
+			var marker = {loading: true};
+			suggestionCache[cell.id] = marker;
+
+			returnSuggest(cell).then(function(markdown)
+			{
+				if (suggestionCache[cell.id] !== marker)
+				{
+					return;
+				}
+
+				var items = parseMarkDown(markdown);
+				var texts = [];
+
+				for (var i = 0; i < items.length; i++)
+				{
+					if (items[i].depth == 0)
+					{
+						texts.push(items[i].text);
+					}
+				}
+
+				suggestionCache[cell.id] = texts.slice(0, 3);
+				refreshShapePicker(cell);
+			}).catch(function(e)
+			{
+				if (suggestionCache[cell.id] !== marker)
+				{
+					return;
+				}
+
+				suggestionCache[cell.id] = {error: e.message};
+				refreshShapePicker(cell);
+				console.error('AI提案に失敗', e);
+			});
+		}
+
 		graph.getSelectionModel().addListener(mxEvent.CHANGE, function()
 		{
 			var cell = graph.getSelectionCell();
 
-			if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
-				isTreeVertex(cell) && suggestionCache[cell.id] == null)
+			if (aiSuggestEnabled && graph.getSelectionCount() == 1 && isTreeVertex(cell))
 			{
-				suggestionCache[cell.id] = 'loading';   // 問い合わせ中の印
+				var state = suggestionCache[cell.id];
 
-				var prompt = graph.convertValueToString(cell);   // 仮
-
-				returnSuggest(cell).then(function(markdown)
+				if (state == null || state.error != null)
 				{
-					var items = parseMarkDown(markdown);
-					var texts = [];
-
-					for (var i = 0; i < items.length; i++)
-					{
-						if (items[i].depth == 0)
-						{
-							texts.push(items[i].text);
-						}
-					}
-
-					suggestionCache[cell.id] = texts;
-				}).catch(function(e)
-				{
-					delete suggestionCache[cell.id];
-					console.error('AI提案に失敗', e);
-				});
+					requestSuggestions(cell);
+				}
 			}
 		});
 
-		var aiSuggestEnabled = false;
-		var suggestionCache = {};
+		graph.model.addListener(mxEvent.CHANGE, function(sender, evt)
+		{
+			var changes = evt.getProperty('edit').changes;
+			var targets = {};   // id → ノード（同じノードを2回処理しないため）
+
+			function addTarget(cell)
+			{
+				if (cell != null)
+				{
+					targets[cell.id] = cell;
+				}
+			}
+
+			for (var i = 0; i < changes.length; i++)
+			{
+				var change = changes[i];
+
+				if (change instanceof mxValueChange)
+				{
+					addTarget(change.cell);
+				}
+				else if (change instanceof mxChildChange && graph.model.isEdge(change.child))
+				{
+					addTarget(graph.model.getTerminal(change.child, true));
+				}
+				else if (change instanceof mxTerminalChange && change.source)
+				{
+					addTarget(change.terminal);
+					addTarget(change.previous);
+				}
+			}
+
+			for (var id in targets)
+			{
+				var cell = targets[id];
+
+				if (suggestionCache[id] != null)
+				{
+					delete suggestionCache[id];
+
+					if (aiSuggestEnabled && graph.getSelectionCount() == 1 &&
+						graph.getSelectionCell() == cell && isTreeVertex(cell))
+					{
+						requestSuggestions(cell);
+					}
+				}
+			}
+		});	
 
 		var uiGetCellsForShapePicker = ui.getCellsForShapePicker;
 
@@ -677,6 +752,46 @@
 
 			return cells;
 		}
+		// 最後に候補パネルを開いたときの引数（x, y, source, …）
+		var uiShowShapePicker = ui.showShapePicker;
+
+		ui.showShapePicker = function(x, y, source)
+		{
+			lastPickerArgs = arguments;
+			return uiShowShapePicker.apply(this, arguments);
+		};
+
+		// cell の候補パネルが開いたままなら、開き直して最新の状態を表示する
+		function refreshShapePicker(cell)
+		{
+			if (ui.shapePicker != null && lastPickerArgs != null &&
+				lastPickerArgs[2] == cell)
+			{
+				ui.hideShapePicker();
+				ui.showShapePicker.apply(ui, lastPickerArgs);
+			}
+		}
+
+		ui.getAiSuggestionStatus = function(cell)
+		{
+			if (!aiSuggestEnabled || !isTreeVertex(cell))
+			{
+				return null;
+			}
+
+			var state = suggestionCache[cell.id];
+
+			if (state != null && state.loading)
+			{
+				return '考え中…';
+			}
+			else if (state != null && state.error != null)
+			{
+				return '提案を取得できませんでした';
+			}
+
+			return null;   // 提案が届いている、またはまだ聞いていない
+		};
 
 		graph.addListener(mxEvent.CELLS_ADDED, function(sender, evt)
 		{
