@@ -575,6 +575,7 @@
 				}
 
 				suggestionCache[cell.id] = texts.slice(0, 3);
+				refreshShapePicker(cell);
 			}).catch(function(e)
 			{
 				if (suggestionCache[cell.id] !== marker)
@@ -583,6 +584,7 @@
 				}
 
 				suggestionCache[cell.id] = {error: e.message};
+				refreshShapePicker(cell);
 				console.error('AI提案に失敗', e);
 			});
 		}
@@ -684,6 +686,25 @@
 			}
 
 			return cells;
+		}
+		// 最後に候補パネルを開いたときの引数（x, y, source, …）
+		var uiShowShapePicker = ui.showShapePicker;
+
+		ui.showShapePicker = function(x, y, source)
+		{
+			lastPickerArgs = arguments;
+			return uiShowShapePicker.apply(this, arguments);
+		};
+
+		// cell の候補パネルが開いたままなら、開き直して最新の状態を表示する
+		function refreshShapePicker(cell)
+		{
+			if (ui.shapePicker != null && lastPickerArgs != null &&
+				lastPickerArgs[2] == cell)
+			{
+				ui.hideShapePicker();
+				ui.showShapePicker.apply(ui, lastPickerArgs);
+			}
 		}
 
 		ui.getAiSuggestionStatus = function(cell)
