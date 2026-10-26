@@ -563,7 +563,6 @@
 
 		function getAiKey()
 		{
-			console.log('getAiKey called')
 			var aiSuggestKey = 'aiSuggestKey'
 			if(window.aiKey)
 			{
