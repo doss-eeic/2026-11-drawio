@@ -2543,7 +2543,7 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 		
 		graph.container.appendChild(div);
 		
-		var addCell = mxUtils.bind(this, function(cell)
+		var addCell = mxUtils.bind(this, function(cell, container)
 		{
 			var isAi = cell.style != null && cell.style.indexOf('aiSuggestion=1') >= 0;   // ← 追加
 			var thumbW = isAi ? 120 : 25;                                                 // ← 追加
@@ -2551,7 +2551,7 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 
 			// Wrapper needed to catch events
 			var node = document.createElement('a');
-			div.appendChild(node);
+			container.appendChild(node);
 
 			var fixed = cell.shapePickerKeepStyle;
 			delete cell.shapePickerKeepStyle;
@@ -2669,9 +2669,53 @@ EditorUi.prototype.createShapePicker = function(x, y, source, callback, directio
 			}
 		});
 		
-		for (var i = 0; i < (hovering ? Math.min(cells.length, 4) : cells.length); i++)
+		// for (var i = 0; i < (hovering ? Math.min(cells.length, 4) : cells.length); i++)
+		// {
+		// 	addCell(cells[i]);
+		// }
+
+		// 候補を AI の案と、元からの図形に振り分ける
+
+		var aiCells = [];
+		var normallCells = [];
+		
+		for (var i = 0; i < cells.length; i++)
+		{		
+			var s = cells[i].style;
+
+			if (s != null && s.indexOf('aiSuggestion=1') >= 0)
+			{
+				aiCells.push(cells[i]);
+			}
+			else
+			{
+				normallCells.push(cells[i]);
+			}
+		}
+
+		var max = hovering ? 3 : cells.length;
+
+		for (var i = 0; i < Math.min(normallCells.length, max); i++)
 		{
-			addCell(cells[i]);
+			addCell(normallCells[i], div);
+		}
+
+		if (aiCells.length > 0)
+		{
+			var aiDiv = document.createElement('div');
+			aiDiv.className = 'geShapePicker';
+			aiDiv.style.left = '100%';
+			aiDiv.style.top = '-1px';
+			aiDiv.style.width = '150px';
+			aiDiv.style.height = 'auto';
+			aiDiv.style.display = 'block';
+			aiDiv.style.padding = '6px 0 8px 0';
+			div.appendChild(aiDiv);
+
+			for (var i = 0; i < Math.min(aiCells.length, max); i++)
+			{
+				addCell(aiCells[i], aiDiv);
+			}
 		}
 		
 		var b = graph.container.scrollTop + graph.container.offsetHeight;
