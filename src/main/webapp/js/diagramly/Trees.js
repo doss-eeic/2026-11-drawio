@@ -722,6 +722,11 @@
 
 		ui.getCellsForShapePicker = function(cell, hovering, showEdges)
 		{
+			if (aiSuggestEnabled && isTreeVertex(cell) && suggestionCache[cell.id] == null)
+			{
+			requestSuggestions(cell);
+			}
+
 			var cells = uiGetCellsForShapePicker.apply(this, arguments);   // いつもの候補
 			var texts = (cell != null) ? suggestionCache[cell.id] : null;
 
@@ -753,6 +758,7 @@
 			return cells;
 		}
 		// 最後に候補パネルを開いたときの引数（x, y, source, …）
+		var lastPickerArgs = null;
 		var uiShowShapePicker = ui.showShapePicker;
 
 		ui.showShapePicker = function(x, y, source)
